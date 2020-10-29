@@ -73,7 +73,7 @@ class ManagementController extends AbstractController
      */
     public function login()
     {
-        return $this->json(['result' => true]);
+        return $this->json(['errors' => false]);
     }
 
     /**
@@ -99,7 +99,7 @@ class ManagementController extends AbstractController
     {
         $em->remove($this->getUser());
         $em->flush();
-        return $this->json(['result' => true]);
+        return $this->json(['errors' => false]);
     }
 
 }

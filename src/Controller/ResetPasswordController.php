@@ -2,22 +2,20 @@
 
 namespace App\Controller;
 
-use App\Entity\ResetPasswordRequest;
 use App\Entity\User;
-use App\Form\ChangePasswordFormType;
-use App\Form\ResetPasswordRequestFormType;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
-use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 use SymfonyCasts\Bundle\ResetPassword\Controller\ResetPasswordControllerTrait;
 use SymfonyCasts\Bundle\ResetPassword\Exception\ResetPasswordExceptionInterface;
 use SymfonyCasts\Bundle\ResetPassword\ResetPasswordHelperInterface;
+use Symfony\Component\Routing\Annotation\Route;
 
 /**
  * @Route("/reset-password")
@@ -26,7 +24,7 @@ class ResetPasswordController extends AbstractController
 {
     use ResetPasswordControllerTrait;
 
-    private ResetPasswordHelperInterface $resetPasswordHelper;
+    private $resetPasswordHelper;
 
     public function __construct(ResetPasswordHelperInterface $resetPasswordHelper)
     {
@@ -42,11 +40,7 @@ class ResetPasswordController extends AbstractController
     public function request(Request $request, MailerInterface $mailer): Response
     {
         $email = $request->request->get("email");
-
-        return $this->sendPasswordResetEmail(
-            $email,
-            $mailer
-        );
+        return $this->sendPasswordResetEmail($email, $mailer);
     }
 
     /**
@@ -65,15 +59,15 @@ class ResetPasswordController extends AbstractController
             $user = $this->resetPasswordHelper->validateTokenAndFetchUser($token);
         } catch (ResetPasswordExceptionInterface $e) {
             return $this->json([
-                'error' => 'There was a problem validating your reset request - %s',
+                'errors' => 'There was a problem validating your reset request - %s',
                 $e->getReason()
             ], 400);
         }
-        return $this->json(['result' => true, 'token' => $token, 'userId' => $user->getId()]);
+        return $this->json(['errors' => false, 'token' => $token, 'userId' => $user->getId()]);
     }
 
     /**
-     * @Route("/change_password", name="change_password", methods={"POST"})
+     * @Route("/change_password", name="change_password", methods={"PUT"})
      * @param Request $request
      * @param UserPasswordEncoderInterface $passwordEncoder
      * @return Response
@@ -81,10 +75,10 @@ class ResetPasswordController extends AbstractController
     public function change(Request $request, UserPasswordEncoderInterface $passwordEncoder): Response
     {
 
-        $password = $request->request->get("password");
-        $token = $request->request->get("token");
-        $userId = $request->request->get("userId");
-        $passwordConfirmation = $request->request->get("password_confirmation");
+        $password = $request->headers->get("password");
+        $token = $request->headers->get("token");
+        $userId = $request->headers->get("userId");
+        $passwordConfirmation = $request->headers->get("password_confirmation");
         $errors = [];
 
         if (empty($password) || empty($passwordConfirmation)) {
@@ -102,34 +96,34 @@ class ResetPasswordController extends AbstractController
             $user = $this->getDoctrine()->getRepository(User::class)->findOneBy([
                 'id' => $userId,
             ]);
-
-            $encodedPassword = $passwordEncoder->encodePassword(
-                $user[0],
-                $password
-            );
-
+            $encodedPassword = $passwordEncoder->encodePassword($user, $password);
             $user->setPassword($encodedPassword);
             $this->getDoctrine()->getManager()->flush();
 
-            return $this->json(['result' => true]);
+            return $this->json(['errors' => $errors]);
         }
 
         return $this->json(['errors' => $errors], 400);
     }
 
-    private function sendPasswordResetEmail(string $emailFormData, MailerInterface $mailer)
+    /**
+     * @param string|null $emailFormData
+     * @param MailerInterface $mailer
+     * @return JsonResponse
+     */
+    private function sendPasswordResetEmail(?string $emailFormData, MailerInterface $mailer)
     {
         $user = $this->getDoctrine()->getRepository(User::class)->findOneBy([
             'email' => $emailFormData,
         ]);
         if (!$user) {
-            return $this->redirectToRoute('api_login');
+            return $this->json(['errors' => 'User not found'], 400);
         }
 
         try {
             $resetToken = $this->resetPasswordHelper->generateResetToken($user);
         } catch (ResetPasswordExceptionInterface $e) {
-            return $this->json(['error' => $e->getReason()], 400);
+            return $this->json(['errors' => $e->getMessage()], 400);
         }
 
         $email = (new TemplatedEmail())
@@ -139,11 +133,15 @@ class ResetPasswordController extends AbstractController
             ->htmlTemplate('emails/reset.html.twig')
             ->context([
                 'resetToken' => $resetToken->getToken(),
-                'tokenLifetime' => $this->resetPasswordHelper->getTokenLifetime()/60/60,
+                'tokenLifetime' => $this->resetPasswordHelper->getTokenLifetime() / 60 / 60,
             ]);
 
-        $mailer->send($email);
+        try {
+            $mailer->send($email);
+        } catch (TransportExceptionInterface $e) {
+            return $this->json(['errors' => $e->getMessage()], 400);
+        }
 
-        return $this->forward('App\Controller\ManagementController::login');
+        return $this->json(['errors' => false]);
     }
 }
