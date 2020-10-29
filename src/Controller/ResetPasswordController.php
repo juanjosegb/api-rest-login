@@ -50,7 +50,7 @@ class ResetPasswordController extends AbstractController
     }
 
     /**
-     * @Route("/reset/{token}", name="reset_password")
+     * @Route("/reset/{token}", name="reset_password", methods={"GET"})
      * @param string|null $token
      * @return Response
      */
@@ -144,6 +144,6 @@ class ResetPasswordController extends AbstractController
 
         $mailer->send($email);
 
-        return $this->redirectToRoute('ManagementController:api_login');
+        return $this->forward('App\Controller\ManagementController::login');
     }
 }
