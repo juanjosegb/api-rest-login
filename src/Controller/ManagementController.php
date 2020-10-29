@@ -3,13 +3,11 @@
 namespace App\Controller;
 
 use App\Entity\User;
-use Doctrine\ORM\EntityManager;
-use Symfony\Component\HttpFoundation\Request;
-use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\Routing\Annotation\Route;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 
 
@@ -18,6 +16,10 @@ class ManagementController extends AbstractController
 
     /**
      * @Route("/register", name="api_register", methods={"POST"})
+     * @param EntityManagerInterface $em
+     * @param UserPasswordEncoderInterface $passwordEncoder
+     * @param Request $request
+     * @return JsonResponse
      */
     public function register(EntityManagerInterface $em, UserPasswordEncoderInterface $passwordEncoder, Request $request)
     {
@@ -88,7 +90,8 @@ class ManagementController extends AbstractController
     /**
      * @Route("/delete", name="delete_user", methods={"DELETE"})
      * @IsGranted("ROLE_USER")
-     *
+     * @param EntityManagerInterface $em
+     * @return JsonResponse
      */
     public function delete(EntityManagerInterface $em)
     {
