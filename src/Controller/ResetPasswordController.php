@@ -2,7 +2,9 @@
 
 namespace App\Controller;
 
+use App\Domain\ChangePasswordData;
 use App\Entity\User;
+use App\Services\UtilService;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -25,10 +27,12 @@ class ResetPasswordController extends AbstractController
     use ResetPasswordControllerTrait;
 
     private $resetPasswordHelper;
+    private $utilService;
 
-    public function __construct(ResetPasswordHelperInterface $resetPasswordHelper)
+    public function __construct(ResetPasswordHelperInterface $resetPasswordHelper, UtilService $utilService)
     {
         $this->resetPasswordHelper = $resetPasswordHelper;
+        $this->utilService = $utilService;
     }
 
     /**
@@ -37,72 +41,52 @@ class ResetPasswordController extends AbstractController
      * @param MailerInterface $mailer
      * @return Response
      */
-    public function request(Request $request, MailerInterface $mailer): Response
+    public function requestForgotPassword(Request $request, MailerInterface $mailer): Response
     {
         $email = $request->request->get("email");
         return $this->sendPasswordResetEmail($email, $mailer);
     }
 
     /**
-     * @Route("/reset/{token}", name="reset_password", methods={"GET"})
+     * @Route("/reset/{token}", name="check-token", methods={"GET"})
      * @param string|null $token
      * @return Response
      */
-    public function reset(string $token = null): Response
+    public function checkToken(string $token = null): Response
     {
-
-        if (null === $token) {
-            throw $this->createNotFoundException('No reset password token found in the URL or in the session.');
+        if ($token == null) {
+            return $this->json(['errors' => 'No reset password token found in the URL or in the session.'], 400);
         }
-
         try {
             $user = $this->resetPasswordHelper->validateTokenAndFetchUser($token);
         } catch (ResetPasswordExceptionInterface $e) {
-            return $this->json([
-                'errors' => 'There was a problem validating your reset request - %s',
-                $e->getReason()
-            ], 400);
+            return $this->json(['errors' => 'There was a problem validating your reset request - %s', $e->getReason()], 400);
         }
         return $this->json(['errors' => false, 'token' => $token, 'userId' => $user->getId()]);
     }
 
     /**
-     * @Route("/change_password", name="change_password", methods={"PUT"})
+     * @Route("/change-password", name="change-password", methods={"PUT"})
      * @param Request $request
      * @param UserPasswordEncoderInterface $passwordEncoder
      * @return Response
      */
-    public function change(Request $request, UserPasswordEncoderInterface $passwordEncoder): Response
+    public function changePassword(Request $request, UserPasswordEncoderInterface $passwordEncoder): Response
     {
-
-        $password = $request->headers->get("password");
-        $token = $request->headers->get("token");
-        $userId = $request->headers->get("userId");
-        $passwordConfirmation = $request->headers->get("password_confirmation");
-        $errors = [];
-
-        if (empty($password) || empty($passwordConfirmation)) {
-            $errors[] = "The fields cannot be empty";
-        }
-        if ($password != $passwordConfirmation) {
-            $errors[] = "Password confirmation does not match.";
-        }
-        if (strlen($password) < 6) {
-            $errors[] = "Password must contain at least 6 characters.";
-        }
+        $changePasswordData = new ChangePasswordData($request->request->get("password"),
+            $request->request->get("passwordConfirmation"),
+            $request->request->get("token"),
+            $request->request->get("userId"));
+        $errors = $this->utilService->checkPassword($changePasswordData);
 
         if (empty($errors)) {
-            $this->resetPasswordHelper->removeResetRequest($token);
-            $user = $this->getDoctrine()->getRepository(User::class)->findOneBy([
-                'id' => $userId,
-            ]);
-            $encodedPassword = $passwordEncoder->encodePassword($user, $password);
+            $this->resetPasswordHelper->removeResetRequest($changePasswordData->getToken());
+            $user = $this->getDoctrine()->getRepository(User::class)->findOneBy(['id' => $changePasswordData->getUserId(),]);
+            $encodedPassword = $passwordEncoder->encodePassword($user, $changePasswordData->getPassword());
             $user->setPassword($encodedPassword);
             $this->getDoctrine()->getManager()->flush();
-
             return $this->json(['errors' => $errors]);
         }
-
         return $this->json(['errors' => $errors], 400);
     }
 
@@ -113,9 +97,7 @@ class ResetPasswordController extends AbstractController
      */
     private function sendPasswordResetEmail(?string $emailFormData, MailerInterface $mailer)
     {
-        $user = $this->getDoctrine()->getRepository(User::class)->findOneBy([
-            'email' => $emailFormData,
-        ]);
+        $user = $this->getDoctrine()->getRepository(User::class)->findOneBy(['email' => $emailFormData,]);
         if (!$user) {
             return $this->json(['errors' => 'User not found'], 400);
         }
@@ -127,7 +109,7 @@ class ResetPasswordController extends AbstractController
         }
 
         $email = (new TemplatedEmail())
-            ->from(new Address('juanjose.garciabeza@hotmail.com', 'Api Login'))
+            ->from(new Address('apilogin@apilogin.com', 'Api Login'))
             ->to($user->getEmail())
             ->subject('Your password reset request')
             ->htmlTemplate('emails/reset.html.twig')

@@ -1,6 +1,9 @@
 <?php
 
 namespace App\Controller;
+
+use App\Domain\RegisterData;
+use App\Services\UtilService;
 use Doctrine\ORM\EntityManager;
 use Symfony\Component\HttpFoundation\Request;
 use Doctrine\ORM\EntityManagerInterface;
@@ -16,6 +19,13 @@ use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 class ManagementController extends AbstractController
 {
 
+    private $utilService;
+
+    public function __construct(UtilService $utilService)
+    {
+        $this->utilService = $utilService;
+    }
+
     /**
      * @Route("/register", name="api_register", methods={"POST"})
      * @param EntityManagerInterface $em
@@ -26,34 +36,21 @@ class ManagementController extends AbstractController
     public function register(EntityManagerInterface $em, UserPasswordEncoderInterface $passwordEncoder, Request $request)
     {
 
-        $user = new User();
+        $registerData = new RegisterData($request->request->get("email"),
+            $request->request->get("password"),
+            $request->request->get("passwordConfirmation"));
+        $errors = $this->utilService->checkPassword($registerData);
 
-        $email = $request->request->get("email");
-        $password = $request->request->get("password");
-        $passwordConfirmation = $request->request->get("password_confirmation");
-
-        $errors = [];
-        if (empty($password) || empty($passwordConfirmation) || empty($email)) {
-            $errors[] = "The fields cannot be empty";
-        }
-        if ($password != $passwordConfirmation) {
-            $errors[] = "Password confirmation does not match.";
-        }
-        if (strlen($password) < 6) {
-            $errors[] = "Password must contain at least 6 characters.";
-        }
         if (!$errors) {
-            $encodedPassword = $passwordEncoder->encodePassword($user, $password);
-            $user->setEmail($email);
+            $user = new User();
+            $encodedPassword = $passwordEncoder->encodePassword($user, $registerData->getPassword());
+            $user->setEmail($registerData->getEmail());
             $user->setPassword($encodedPassword);
 
             try {
                 $em->persist($user);
                 $em->flush();
-
-                return $this->json([
-                    'user' => $user
-                ]);
+                return $this->json(['user' => $user]);
             } catch (UniqueConstraintViolationException $e) {
                 $errors[] = "The email provided already has an account!";
             } catch (\Exception $e) {
@@ -62,9 +59,7 @@ class ManagementController extends AbstractController
 
         }
 
-        return $this->json([
-            'errors' => $errors
-        ], 400);
+        return $this->json(['errors' => $errors], 400);
 
     }
 
@@ -82,11 +77,7 @@ class ManagementController extends AbstractController
      */
     public function profile()
     {
-        return $this->json([
-            'user' => $this->getUser()
-        ], 200, [], [
-            'groups' => ['api']
-        ]);
+        return $this->json(['user' => $this->getUser()], 200, [], ['groups' => ['api']]);
     }
 
     /**
