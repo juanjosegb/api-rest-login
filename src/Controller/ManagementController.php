@@ -38,7 +38,7 @@ class ManagementController extends AbstractController
 
         $registerData = new RegisterData($request->request->get("email"),
             $request->request->get("password"),
-            $request->request->get("passwordConfirmation"));
+            $request->request->get("confirmPassword"));
         $errors = $this->utilService->checkPassword($registerData);
 
         if (!$errors) {
