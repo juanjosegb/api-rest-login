@@ -60,9 +60,9 @@ class ResetPasswordController extends AbstractController
         try {
             $user = $this->resetPasswordHelper->validateTokenAndFetchUser($token);
         } catch (ResetPasswordExceptionInterface $e) {
-            return $this->json(['errors' => 'There was a problem validating your reset request - %s', $e->getReason()], 400);
+            return $this->json(['errors' => $e->getReason()], 400);
         }
-        return $this->json(['errors' => false, 'token' => $token, 'userId' => $user->getId()]);
+        return $this->json(['errors' => false, 'token' => $token, 'userId' => $user->getId()], 200);
     }
 
     /**
@@ -99,7 +99,7 @@ class ResetPasswordController extends AbstractController
     {
         $user = $this->getDoctrine()->getRepository(User::class)->findOneBy(['email' => $emailFormData,]);
         if (!$user) {
-            return $this->json(['errors' => 'User not found'], 400);
+            return $this->json(['errors' => false], 200);
         }
 
         try {
@@ -124,6 +124,6 @@ class ResetPasswordController extends AbstractController
             return $this->json(['errors' => $e->getMessage()], 400);
         }
 
-        return $this->json(['errors' => false]);
+        return $this->json(['errors' => false], 200);
     }
 }
