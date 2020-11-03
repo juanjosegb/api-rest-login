@@ -4,6 +4,10 @@ This project was created with Symfony 5.1
 
 ## Installation
 
+# Install the libraries with the command:
+
+`composer install`
+
 # Create database with the following command:
 
 `php bin/console doctrine:database:create`
