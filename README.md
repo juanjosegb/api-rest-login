@@ -22,8 +22,6 @@ This project was created with Symfony 5.1
 
 `php bin/console make:migration`
 
-`php bin/console doctrine:migrations:migrate`
-
 ## Running the project
 
 `php bin/console server:run`
